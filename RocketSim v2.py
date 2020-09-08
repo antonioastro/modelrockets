@@ -25,8 +25,6 @@ def Engine(obj):
 
 def Drag(obj):
     rho = 1.225 #density of air kg/m3
-    #theta = 50 #half-angle of parachute (estimated)
-    #C = 0.0112*theta+0.162
     dforce = -0.125*rho*obj.velocity*obj.chute**2*2.3*math.pi #remember - C is overridden here to 2.3 due to googling
     return dforce #drag force
 
