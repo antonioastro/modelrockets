@@ -1,0 +1,188 @@
+import matplotlib.pyplot as plt
+import math
+import copy
+import numpy as np
+
+#define what a "rocket" is
+class Rocket():
+        position = np.array([0.,0.])
+        velocity = np.array([0.,0.])
+        accceleration = np.array([0.,0.])
+        force = np.array([0.,0.])
+        massengine = 0.
+        massrocket = 0.
+        massprop = 0.
+        impulse = 0.
+        thrusttime = 0.
+        timedelay = 0.
+        chute = 0.
+        rocket_ = []
+
+        def __init__(self,initialPosition,initialVelocity,initialAcceleration,force,massengine,massrocket,massprop,impulse,thrusttime,timedelay,chute):
+            self.rocket_.append(self)
+            self.position = np.array(initialPosition)
+            self.velocity = np.array(initialVelocity)
+            self.acceleration = np.array(initialAcceleration)
+            self.force = np.array(force)
+            self.massengine = massengine
+            self.massrocket = massrocket
+            self.massprop = massprop
+            self.impulse = impulse
+            self.thrusttime = thrusttime
+            self.timedelay = timedelay
+            self.chute = chute
+
+        def eulercramer(self,deltaT): #the iteration method
+            self.velocity = self.velocity + (self.acceleration*deltaT)
+            self.position = self.position + (self.velocity*deltaT)
+
+        def __repr__(self): #this states what is printed when print(Class) is called. Generally just ignore this.
+            return (self.position,self.velocity,self.acceleration,self.force)
+
+#define the parameters for the rocket
+Estes_Astrocam = Rocket([0.,0.],[0.,0.],[0.,0.],[0.,0.],16.2,46.2,3.12,2.5,0.5,3,0.381)
+#Big_Bertha= Rocket([0.,0.],[0.,0.],[0.,0.],[0.,0.],25,110,12.48,10,1.6,5,0.457)
+
+#position m,velocity m/s,acceleration m/s2,force acted on rocket N, massengine g,massrocket g,masspropellant g,impulse Ns,thrusttime s,timedelay s,chute diameter m
+#do not change position, velocity vectors unless the launch platform is intended to be raised above ground, or moving
+#do not ever change the acceleration, force vectors
+
+rocket=Rocket.rocket_ #creates a list of all instances of "Rocket"
+
+#define the forces acting on the rocket
+def Gravity(obj):
+    g=np.array([0.,-9.81]) #local gravity
+    Grav = (obj.massrocket+obj.massengine)*g/1000
+    return Grav #force due to gravity
+
+#def Engine(obj):
+#    force = obj.impulse / obj.thrusttime #assume engine exerts a constant force
+#    Eng = np.array([0.,force])
+#    return Eng #force due to rocket engine
+
+def Engine10(obj): #the initial force increasing linearly up to 10N
+    dFdT = 10/0.2 #the initial rate of change of thrust from the engine
+    force=0
+    force = dFdT*time
+    Eng=np.array([0.,force])
+    return Eng
+
+def Engine2(obj):
+    force = 2 #after 0.2s, the thrust is just 2N
+    Eng = np.array([0.,force])
+    return Eng
+
+def Drag(obj):
+    rho = 1.225 #density of air kg/m3
+    dforce = -0.125*rho*obj.velocity*obj.chute**2*2.3*math.pi #remember - C is overridden here to 2.3 due to googling
+    return dforce #drag force
+
+def Wind(obj):
+    rho = 1.225 #density of air kg/m3
+    theta = 90 #half-angle of edge (estimated)
+    C = 0.0112*theta+0.162
+    wforce = np.array([0.5*rho*wind*0.02*0.3*C,0.])
+    return wforce
+
+#start the simulation
+deltaT=0.001 #the timestep, a lower number is more accurate
+runtime=25
+wind=5 #windspeed m/s
+
+time=0 #set the start of time
+data=[] #the data list, leave this blank
+while (time<runtime):
+    temp1=[]
+    time = time + deltaT
+    for obj in rocket:
+        #if time<obj.thrusttime:
+        #    obj.force=Gravity(obj)+Engine(obj)+Wind(obj)
+        #    obj.acceleration=1000*obj.force/(obj.massrocket+obj.massengine) #assume the mass doesnt change until AFTER burn is over (biggest assumption)
+        if time<0.2:
+            obj.force=Gravity(obj)+Engine10(obj)+Wind(obj)
+            obj.acceleration=1000*obj.force/(obj.massrocket+obj.massengine)
+        elif obj.thrusttime>time:
+            obj.force=Gravity(obj)+Engine2(obj)+Wind(obj)
+            obj.acceleration=1000*obj.force/(obj.massrocket+obj.massengine)
+        elif obj.thrusttime<time and time<obj.thrusttime+obj.timedelay:
+            obj.force=Gravity(obj)+Wind(obj)
+            obj.acceleration=1000*obj.force/(obj.massrocket+obj.massengine-obj.massprop)
+        else:
+            obj.force=Gravity(obj)+Drag(obj)+Wind(obj)
+            obj.acceleration=1000*obj.force/(obj.massrocket+obj.massengine-obj.massprop)
+        obj.eulercramer(deltaT)
+        temp1.append(copy.deepcopy(obj))
+        if obj.position[1]<0:
+            continue
+        else:
+            item=[time]
+            item=item+temp1
+            data.append(item)
+
+np.save('data.npy',data)
+np.save('listrockets.npy',rocket)
+print('saved data')
+
+#plot the graphs
+data=np.load('data.npy',allow_pickle=True)
+rocketlist=np.load('listrockets.npy',allow_pickle=True)
+
+f1=plt.figure('Trajectory of Rocket')
+obj=0
+while obj < len(rocketlist):
+    xpos=[]
+    ypos=[]
+    for line in data:
+        xpos.append(line[obj+1].position[0])
+        ypos.append(line[obj+1].position[1])
+    plt.plot(xpos,ypos,'-')
+    obj=obj+1
+plt.xlabel('x-position (m)')
+plt.ylabel('y-position (m)')
+plt.savefig('trajectory.png',bbox_inches='tight',dpi=1000)
+
+f2=plt.figure('Altitude of Rocket')
+obj=0
+while obj < len(rocketlist):
+    time=[]
+    ypos=[]
+    for line in data:
+        time.append(line[obj])
+        ypos.append(line[obj+1].position[1])
+    plt.plot(time,ypos,'-')
+    obj=obj+1
+plt.xlabel('time since launch (s)')
+plt.ylabel('y-position (m)')
+plt.savefig('Altitude.png',bbox_inches='tight',dpi=1000)
+
+f3=plt.figure('Acceleration of Rocket')
+obj=0
+while obj < len(rocketlist):
+    time=[]
+    acc=[]
+    for line in data:
+        time.append(line[obj])
+        acctot = np.linalg.norm(line[obj+1].acceleration)/9.81
+        acc.append(acctot)
+    plt.plot(time,acc,'-')
+    obj=obj+1
+plt.xlabel('time since launch (s)')
+plt.ylabel('total acceleration (g)')
+plt.savefig('acceleration.png',bbox_inches='tight',dpi=1000)
+
+f4=plt.figure('Velocity of Rocket')
+obj=0
+while obj < len(rocketlist):
+    time=[]
+    vel=[]
+    for line in data:
+        time.append(line[obj])
+        veltot = np.linalg.norm(line[obj+1].velocity)
+        vel.append(veltot)
+    plt.plot(time,vel,'-')
+    obj=obj+1
+plt.xlabel('time since launch (s)')
+plt.ylabel('total velocity (m/s)')
+plt.savefig('velocity.png',bbox_inches='tight',dpi=1000)
+
+print('done')
